@@ -29,3 +29,12 @@ script now watches its probe request; on failure it marks `DoLStorageFallback.in
 and the saves menu switches to the slot list. `window.DoLStorageFallback` reports what the fallback did.
 
 With storage available, nothing changes: the stubs are not installed and IndexedDB stays active.
+
+## Publishing (audio is in Git LFS)
+
+`audio/**` is a Git LFS path upstream. Without git-lfs, a checkout has 131-byte pointer files, and
+GitHub Pages also serves LFS-tracked files as pointers, so music and sound silently fail to decode.
+To make a Pages copy, run `./compile.sh` and then `devTools/prepare-pages.sh <output-dir>`. That copies
+the HTML and images, downloads the real audio for each pointer from the upstream LFS server (checking
+SHA-256 and size), and refuses to finish if any audio file is still a pointer
+(`devTools/lfs-audio.py check <dir>`). Commit the result as plain files; do not use LFS there.
