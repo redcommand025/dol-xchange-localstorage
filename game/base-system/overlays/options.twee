@@ -945,6 +945,25 @@ IMPORTANT:
 				<label><<checkbox "$options.images" 0 1 autocheck>> Enable images</label>
 				<span class="tooltip-anchor linkBlue" tooltip="<span class='linkBlue'>Images may not load properly on older Androids.</span>">(?)</span>
 			</div>
+			<<if ImagePacks.available("au") or ImagePacks.available("aumasc") or ImagePacks.available("mysterious")>>
+				<<if $options.imagePack is undefined>><<set $options.imagePack to "default">><</if>>
+				<<if $options.imagePackMysterious is undefined>><<set $options.imagePackMysterious to false>><</if>>
+				<div class="settingsToggleItem" onchange="ImagePacks.changed()">
+					<label data-target="options.images" data-disabledif="V.options.images===0">Image pack:
+						<<listbox "$options.imagePack" autoselect>>
+							<<option "Default" "default">>
+							<<if ImagePacks.available("au")>><<option "Aoki Utage (Fem)" "au">><</if>>
+							<<if ImagePacks.available("aumasc")>><<option "Aoki Utage (Masc)" "aumasc">><</if>>
+						<</listbox>>
+					</label>
+					<span class="tooltip-anchor linkBlue" tooltip="Loads sprites from the imagepacks folder shipped with the game, falling back to the default sprite for anything the pack does not replace.">(?)</span>
+				</div>
+				<<if ImagePacks.available("mysterious")>>
+					<div class="settingsToggleItem" onchange="ImagePacks.changed()">
+						<label data-target="options.images" data-disabledif="V.options.images===0"><<checkbox "$options.imagePackMysterious" false true autocheck>> Mysterious combat sprites</label>
+					</div>
+				<</if>>
+			<</if>>
 			<div class="settingsToggleItem">
 				<label data-target="options.images" data-disabledif="V.options.images===0"><<checkbox "$options.combatImages" 0 1 autocheck>> Enable combat images</label>
 			</div>
