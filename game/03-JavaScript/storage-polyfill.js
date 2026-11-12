@@ -101,4 +101,26 @@
 	if (!nativeLS || !nativeSS || idbUnusable()) {
 		disableIndexedDB();
 	}
+	/* The head fallback normally creates this; keep a minimal copy for builds that skipped it. */
+	if (!window.DoLStorageFallback) {
+		window.DoLStorageFallback = {
+			localStorage: nativeLS ? "native" : "memory",
+			sessionStorage: nativeSS ? "native" : "memory",
+			indexedDB: window.indexedDB == null ? "disabled" : "native",
+			memoryOnly: !nativeLS,
+			active() {
+				return this.memoryOnly || this.indexedDB !== "native";
+			},
+			applyToIdb() {},
+		};
+	}
+	/* DoL resets idb.active from its settings (idb.updateSettings) during startup, so re-apply a
+	   detected IndexedDB denial before each passage; save/autosave paths read idb.active. */
+	if (window.jQuery) {
+		jQuery(document).on(":passagestart.storagefallback", () => {
+			try {
+				window.DoLStorageFallback.applyToIdb();
+			} catch (e) {}
+		});
+	}
 })();
