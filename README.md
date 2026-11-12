@@ -1,3 +1,5 @@
+> **About this fork:** an unofficial copy of [Akoz/dol-xchange](https://gitgud.io/Akoz/dol-xchange) at upstream commit `ddb1cf03`, with one change: the game can start when the browser blocks `localStorage`/IndexedDB (see [docs/storage-fallback.md](docs/storage-fallback.md)). All game content and credits belong to the original authors listed below. Licensed under CC BY-NC-SA 4.0, same as upstream (see `LICENSE`).
+
 # Degrees of Lewdity: X-Change Edition
 
 > You take a pill. And you turn into an incredibly attractive opposite-sex version of yourself (try to keep control of what happens next!).
