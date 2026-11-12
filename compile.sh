@@ -71,6 +71,11 @@ function compile() {
 		echoError "Build failed."
 		exit 1
 	else
+		# tweego places --head content after SugarCube's libraries; copy the storage fallback to the top of <head>
+		python3 devTools/prepend-storage-fallback.py "$TARGET" || {
+			echoError "Failed to prepend storage fallback before SugarCube."
+			exit 1
+		}
 		if [ "$TARGET" != "Degrees of Lewdity.html" ]; then
 			# android builder expects to find a file by this name. this is a symbolic link, not a full copy
 			ln -fs "$TARGET" "Degrees of Lewdity.html" || cp -f "$TARGET" "Degrees of Lewdity.html"
