@@ -86,13 +86,53 @@
       if (window.indexedDB == null) return true;
       if (typeof window.indexedDB.open !== "function") return true;
     } catch (e) { return true; }
-    try { window.indexedDB.open("__dol_idb_probe__"); }
+    try { probeReq = window.indexedDB.open("__dol_idb_probe__"); }
     catch (e) { return true; }
     return false;
   }
+  /* What the fallback did, for the saves menu and the late polyfill. "memoryOnly" means saves
+     vanish when the tab closes. indexedDB: "native" | "disabled" (nulled before SugarCube) |
+     "denied" (open() failed asynchronously after SugarCube had already chosen IndexedDB). */
+  /* head.html runs twice (prepended copy, then tweego's --head copy); keep the first, truthful report. */
+  var fallback = window.DoLStorageFallback || (window.DoLStorageFallback = {
+    localStorage: nativeLS ? "native" : "memory",
+    sessionStorage: nativeSS ? "native" : "memory",
+    indexedDB: "native",
+    memoryOnly: !nativeLS,
+    active: function(){ return this.memoryOnly || this.indexedDB !== "native"; },
+    /* SugarCube's idb keeps active=true when its open() is denied, which leaves the saves menu
+       empty. Switch it to the slot-save list (idb.active's setter is not persisted). */
+    applyToIdb: function(){
+      try { if (fallback.indexedDB === "denied" && typeof idb !== "undefined" && idb && idb.active) idb.active = false; } catch (e) {}
+    }
+  });
+  function markDenied(){
+    if (fallback.indexedDB === "native") fallback.indexedDB = "denied";
+    fallback.applyToIdb();
+  }
+  var probeReq = null;
   if (!nativeLS || !nativeSS || idbUnusable()) {
     disableIndexedDB();
+    if (fallback.indexedDB === "native") fallback.indexedDB = "disabled";
+  } else if (probeReq) {
+    try {
+      probeReq.onerror = function(ev){ try { if (ev && ev.preventDefault) ev.preventDefault(); } catch (e) {} markDenied(); };
+      probeReq.onsuccess = function(){
+        try { probeReq.result.close(); window.indexedDB.deleteDatabase("__dol_idb_probe__"); } catch (e) {}
+      };
+    } catch (e) { markDenied(); }
   }
+  /* SugarCube's idb.init() rejection when IndexedDB is denied is not caught; keep it off the console. */
+  try {
+    window.addEventListener("unhandledrejection", function(ev){
+      var r = ev && ev.reason;
+      if (!r || typeof DOMException === "undefined" || !(r instanceof DOMException)) return;
+      if (!/^(UnknownError|InvalidStateError|SecurityError|NotAllowedError|NotFoundError)$/.test(r.name)) return;
+      if (fallback.indexedDB === "native" && !/database|indexeddb/i.test(String(r.message))) return;
+      markDenied();
+      try { ev.preventDefault(); } catch (e) {}
+    });
+  } catch (e) {}
   try {
     if (navigator.storage && typeof navigator.storage.persist === "function") {
       var persistOrig = navigator.storage.persist.bind(navigator.storage);

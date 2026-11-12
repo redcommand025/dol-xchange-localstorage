@@ -25,6 +25,9 @@
 	<div id="saveGuardNotice"></div>
 	<<run setTimeout(() => DoLSaveGuard.renderNotice("saveGuardNotice"))>>
 
+	<<storageFallbackSaves>>
+	/* a denied IndexedDB leaves idb.active on; switch to the slot list so Save buttons render */
+	<<run window.DoLStorageFallback && DoLStorageFallback.applyToIdb()>>
 	<div id="saveList">
 		<<if idb.active and !$ironmanmode and !sessionStorage.getItem("noidb")>>
 			<<run setTimeout(() => idb.saveList())>>

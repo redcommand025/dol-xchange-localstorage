@@ -1,0 +1,25 @@
+:: Saves Storage Fallback [widget]
+
+/* Shown at the top of the saves menu when the browser blocks storage (see devTools/head.html).
+   Saves still work; this only explains where they go and puts file export/import one click away. */
+<<widget "storageFallbackSaves">>
+	<<if window.DoLStorageFallback and DoLStorageFallback.active()>>
+		<div id="storageFallbackNotice" class="storage-fallback-notice">
+			<<if DoLStorageFallback.memoryOnly>>
+				<span class="gold">This browser is blocking storage, so saves are kept in memory and will be lost when this tab is closed or reloaded. Use "Save to file" to keep your progress.</span>
+			<<else>>
+				<span class="gold">This browser is blocking IndexedDB, so saves use the slot list below. Use "Save to file" every so often to keep a copy.</span>
+			<</if>>
+			<br>
+			<<if tags().includes("nosave") or $replayScene isnot undefined>>
+				<input type="button" value="Save to file" disabled/>
+			<<elseif $ironmanmode is true>>
+				<input type="button" value="Save to file" disabled/> (ironman: only autosaves can be exported)
+			<<else>>
+				<input id="storageFallbackExport" type="button" class="saveMenuButton" value="Save to file" onclick="SugarCube.Save.export('degrees-of-lewdity' + (V.saveName ? '-' + V.saveName : ''))"/>
+			<</if>>
+			Load from file: <input id="storageFallbackImport" type="file" onchange="importSave(this.files)">
+		</div>
+		<br>
+	<</if>>
+<</widget>>
