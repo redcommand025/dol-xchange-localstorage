@@ -14,6 +14,7 @@ function echoMessage() {
 
 function compile() {
 	node devTools/generate-music-library.cjs || return 1
+	node devTools/generate-imagepack-manifest.cjs || return 1
 	export TWEEGO_PATH=devTools/tweego/storyFormats
 	if [ -z ${FORCE_VERSION+true} ]; then
 		VERSION="$(git describe --tags --always --dirty)"

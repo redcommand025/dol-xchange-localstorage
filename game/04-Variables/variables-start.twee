@@ -63,6 +63,8 @@
 		audio: 0,
 		voiceoverAudio: 1,
 		images: 1,
+		imagePack: "default",
+		imagePackMysterious: false,
 		combatImages: 1,
 		bodywritingImages: true,
 		silhouetteEnabled: true,

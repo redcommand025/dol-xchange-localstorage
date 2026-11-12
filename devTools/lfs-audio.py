@@ -124,12 +124,12 @@ def check(root):
     for rel in bad:
         print(f"LFS pointer or empty file: {rel}", file=sys.stderr)
     if bad:
-        print(f"Refusing to publish: {len(bad)} of {count} audio files are not real audio.", file=sys.stderr)
+        print(f"Refusing to publish: {len(bad)} of {count} files are LFS pointers or empty.", file=sys.stderr)
         return 1
     if count == 0:
         print("Refusing to publish: no audio files found.", file=sys.stderr)
         return 1
-    print(f"audio check: {count} files, no LFS pointers")
+    print(f"check: {count} files, no LFS pointers")
     return 0
 
 
