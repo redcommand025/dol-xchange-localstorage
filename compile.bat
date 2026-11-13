@@ -14,14 +14,3 @@ if %PROCESSOR_ARCHITECTURE% == AMD64 (
 ) else (
 	CALL "%~dp0devTools\tweego\tweego_win86.exe" -o "%~dp0Degrees of Lewdity VERSION.html" --head "%~dp0devTools\head.html" "%~dp0game" --module "%~dp0modules"
 )
-
-:: tweego places --head content after SugarCube's libraries; copy the storage fallback to the top of <head>.
-:: Needs Python 3 on PATH. Without it the build still works, but blocked-storage browsers will fail to start.
-set "DOL_PY="
-where py >nul 2>nul && set "DOL_PY=py -3"
-if not defined DOL_PY where python >nul 2>nul && set "DOL_PY=python"
-if defined DOL_PY (
-	%DOL_PY% "%~dp0devTools\prepend-storage-fallback.py" "%~dp0Degrees of Lewdity VERSION.html"
-) else (
-	echo WARNING: Python not found; storage fallback was not prepended to the compiled HTML.
-)
