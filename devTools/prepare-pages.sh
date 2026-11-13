@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 out="${1:?usage: devTools/prepare-pages.sh <output-dir> [compiled.html]}"
 html="${2:-Degrees of Lewdity.html}"
 [ -f "$html" ] || { echo "Compiled HTML not found: $html (run ./compile.sh)" >&2; exit 1; }
-grep -q "Storage fallback: localStorage/sessionStorage/indexedDB" "$html" || { echo "Compiled HTML lacks the storage fallback" >&2; exit 1; }
+grep -q "Storage fallback for devices with no storage" "$html" || { echo "Compiled HTML lacks the localStorage stand-in (devTools/head.html)" >&2; exit 1; }
 mkdir -p "$out"
 # image packs the game can select (Options > Images); keep in sync with devTools/generate-imagepack-manifest.cjs
 packs="imagepacks/au imagepacks/aumasc imagepacks/mysterious"

@@ -7,7 +7,8 @@
  *         (what Chrome does for file:// pages or sandboxed iframes with storage blocked).
  * normal: browser storage left untouched.
  *
- * For each mode it checks: no page errors, no alerts, no SugarCube error views, StoryInit ran,
+ * Storage follows the DoL-localStorage method (devTools/head.html stand-in; IndexedDB untouched).
+ * For each mode it checks: no page errors (other than SugarCube's reported IndexedDB denial), no alerts, no SugarCube error views, StoryInit ran,
  * a new game can be started (Start -> Start2 -> Orphanage Intro), and a slot save/load round-trips.
  * Requires puppeteer-core and a Chrome binary (CHROME_PATH, default /usr/bin/google-chrome).
  */
@@ -175,7 +176,6 @@ async function run(browser, mode) {
 		if (!result.storyInit) problems.push("StoryInit variables missing");
 		if (result.localStorage !== true) problems.push("localStorage unusable: " + result.localStorage);
 		if (result.sessionStorage !== true) problems.push("sessionStorage unusable: " + result.sessionStorage);
-		if (mode === "strict" && !result.indexedDBNull) problems.push("indexedDB not disabled under strict storage");
 		if (result.newGameError) problems.push("new game: " + result.newGameError);
 		if (!result.steps.intro || result.steps.intro.passage !== "Orphanage Intro") problems.push("new game did not reach Orphanage Intro");
 		if (result.saveError) problems.push("save/load: " + result.saveError);
@@ -186,7 +186,12 @@ async function run(browser, mode) {
 	}
 	if (result.finalErrors.length) problems.push("error views: " + result.finalErrors.join(" | "));
 	if (alerts.length) problems.push("alerts: " + alerts.map(a => a.slice(0, 200)).join(" | "));
-	if (pageErrors.length) problems.push("page errors: " + pageErrors.join(" | "));
+	/* DoL-localStorage method: IndexedDB is left alone, so a denied open() surfaces as SugarCube's uncaught idb
+	   rejection. Reported (idbDenialErrors), not failed; any other page error fails. */
+	const idbDenialErrors = pageErrors.filter(m => /denied permission to access the database|indexeddb/i.test(m));
+	const otherPageErrors = pageErrors.filter(m => !idbDenialErrors.includes(m));
+	result.idbDenialErrors = idbDenialErrors;
+	if (otherPageErrors.length) problems.push("page errors: " + otherPageErrors.join(" | "));
 	return { mode, ok: problems.length === 0, problems, consoleErrors, result };
 }
 

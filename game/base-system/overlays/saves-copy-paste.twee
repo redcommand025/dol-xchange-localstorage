@@ -1,0 +1,19 @@
+:: Saves Copy Paste Note [widget]
+
+/* Shown at the top of the saves menu for every player (DoL-localStorage copy/paste mode).
+   Without storage, localStorage is an in-memory stand-in (devTools/head.html), so saves last only until the
+   tab closes; the save string (Export / Copy Text Area) or a save file keeps them. */
+<<widget "savesCopyPasteNote">>
+	<div id="savesCopyPasteNote">
+		<p>localStorage saves are temporary and best used as a copy/paste method. Use the Export / Copy Text Area buttons below to back up your save string. Older browsers that lack IndexedDB will automatically use this method.<br><b>Tip:</b> On any browser, open the Export menu and use Copy Text Area to grab your save string, then paste it back later with Load from Text.</p>
+		<<if tags().includes("nosave") or $replayScene isnot undefined>>
+			<input type="button" value="Save to file" disabled/>
+		<<elseif $ironmanmode is true>>
+			<input type="button" value="Save to file" disabled/> (ironman: only autosaves can be exported)
+		<<else>>
+			<input id="savesExportFile" type="button" class="saveMenuButton" value="Save to file" onclick="SugarCube.Save.export('degrees-of-lewdity' + (V.saveName ? '-' + V.saveName : ''))"/>
+		<</if>>
+		Load from file: <input id="savesImportFile" type="file" onchange="importSave(this.files)">
+	</div>
+	<br>
+<</widget>>

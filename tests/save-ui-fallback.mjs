@@ -1,16 +1,22 @@
 /**
  * Saves menu regression check under blocked storage.
  *
- *   node tests/save-ui-fallback.mjs [compiled.html | https://url] [--mode=all|normal|strict|idbonly|quota]
+ *   node tests/save-ui-fallback.mjs [compiled.html | https://url] [--mode=all|normal|strict|noidb|idbonly|quota]
  *
  * normal  - browser storage untouched
  * strict  - localStorage/sessionStorage getters throw, indexedDB.open() denied
+ * noidb   - localStorage/sessionStorage getters throw and window.indexedDB is missing (older browsers)
  * idbonly - localStorage works, indexedDB.open() fails asynchronously (e.g. Firefox private windows)
  * quota   - Storage.setItem always throws QuotaExceededError
  *
- * In every mode the saves menu must show enabled Save buttons, saving to a slot and loading it must
- * restore state, "Save to file" must download a save, importing that file must restore it, and there
- * must be no page errors, alerts or SugarCube error views.
+ * Storage handling follows the DoL-localStorage method (devTools/head.html stand-in; the saves menu uses the
+ * IndexedDB list only when window.indexedDB exists). In every mode the saves menu must show the copy/paste
+ * note and the Save to file / Load from file controls; where IndexedDB is missing or works (normal, noidb, quota)
+ * it must show enabled Save buttons
+ * and saving to a slot and loading it must restore state. "Save to file" must download a save, importing that
+ * file must restore it, and there must be no page errors, alerts or SugarCube error views. Where IndexedDB exists
+ * but is denied (strict, idbonly) missing Save buttons and SugarCube's idb rejection are reported in
+ * info.saveButtons / info.idbDenialErrors, not failed (accepted behaviour of the method).
  * Requires puppeteer-core and Chrome (CHROME_PATH, default /usr/bin/google-chrome).
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -53,7 +59,7 @@ function blockStorage(variant) {
 		};
 		return;
 	}
-	if (variant === "strict") {
+	if (variant === "strict" || variant === "noidb") {
 		const deny = name => () => {
 			throw new DOMException(`Failed to read the '${name}' property from 'Window': Access is denied for this document.`, "SecurityError");
 		};
@@ -64,6 +70,13 @@ function blockStorage(variant) {
 				} catch (e) {}
 			}
 		}
+	}
+	if (variant === "noidb") {
+		/* older browsers / browsers that hide IndexedDB entirely */
+		try {
+			Object.defineProperty(window, "indexedDB", { configurable: true, enumerable: true, get: () => undefined });
+		} catch (e) {}
+		return;
 	}
 	const denied = () => {
 		const req = {
@@ -126,9 +139,11 @@ async function run(browser, mode) {
 		return {
 			sugarcube: !!(window.SugarCube && SugarCube.State),
 			passage: window.SugarCube && SugarCube.State ? SugarCube.State.passage : null,
-			fallback: window.DoLStorageFallback
-				? { ls: DoLStorageFallback.localStorage, idb: DoLStorageFallback.indexedDB, memoryOnly: DoLStorageFallback.memoryOnly }
-				: null,
+			/* the head.html stand-in is a plain object; real storage is a Storage instance */
+			localStorageStub: !(window.localStorage instanceof Storage),
+			sessionStorageStub: !(window.sessionStorage instanceof Storage),
+			indexedDB: window.indexedDB ? "present" : "missing",
+			idbActive: window.idb ? idb.active : null,
 			saveOk: window.SugarCube && SugarCube.Save.ok ? SugarCube.Save.ok() : null,
 		};
 	});
@@ -161,8 +176,10 @@ async function run(browser, mode) {
 			return {
 				save: btns.filter(b => (b.value || b.textContent).trim() === "Save").map(b => !b.disabled),
 				load: btns.filter(b => (b.value || b.textContent).trim() === "Load").map(b => !b.disabled),
-				notice: !!document.getElementById("storageFallbackNotice"),
-				noticeExport: !!(document.getElementById("storageFallbackExport") && !document.getElementById("storageFallbackExport").disabled),
+				note: (document.getElementById("savesCopyPasteNote") || {}).textContent || "",
+				noteExport: !!(document.getElementById("savesExportFile") && !document.getElementById("savesExportFile").disabled),
+				noteImport: !!document.getElementById("savesImportFile"),
+				slotList: !!document.querySelector("#saveList .saveTable, #saveList table"),
 				idbActive: window.idb ? idb.active : null,
 			};
 		});
@@ -181,24 +198,33 @@ async function run(browser, mode) {
 		);
 
 	info.menu = await openSaves();
-	if (!info.menu.save.some(Boolean)) problems.push("saves menu has no enabled Save button");
-	if (mode !== "normal" && !info.menu.notice) problems.push("storage fallback notice missing");
-	if (mode === "normal" && info.menu.notice) problems.push("storage fallback notice shown with working storage");
-	if (mode !== "normal" && !info.menu.noticeExport) problems.push("notice Save to file button missing or disabled");
+	/* DoL-localStorage method: the saves menu only checks that window.indexedDB exists. When IndexedDB exists
+	   but is denied (idbonly), the IndexedDB list may never render and Save buttons can be missing; the owner
+	   accepted that, so it is reported (info.saveButtons) rather than failed. */
+	info.saveButtons = info.menu.save.filter(Boolean).length;
+	const expectSlots = !["idbonly", "strict"].includes(mode);
+	if (expectSlots && !info.menu.save.some(Boolean)) problems.push("saves menu has no enabled Save button");
+	if (!/localStorage saves are temporary and best used as a copy\/paste method/.test(info.menu.note)) problems.push("copy/paste note missing");
+	if (!info.menu.noteExport) problems.push("Save to file button missing or disabled");
+	if (!info.menu.noteImport) problems.push("Load from file input missing from the saves menu");
 
 	/* slot save -> change -> load */
-	if (!(await clickButton("Save"))) problems.push("could not click Save");
-	await sleep(2000);
-	await ev(() => {
-		SugarCube.State.variables.saveProbe = "changed";
-	});
-	info.afterSave = await openSaves();
-	if (!info.afterSave.load.some(Boolean)) problems.push("no enabled Load button after saving");
-	if (!(await clickButton("Load"))) problems.push("could not click Load");
-	await sleep(2500);
-	info.slotValue = await ev(() => SugarCube.State.variables.saveProbe);
-	if (info.slotValue !== "slot") problems.push("slot load did not restore state: " + info.slotValue);
-	await ev(() => SugarCube.Dialog && SugarCube.Dialog.isOpen && SugarCube.Dialog.isOpen() && SugarCube.Dialog.close());
+	if (!info.menu.save.some(Boolean)) {
+		info.slotValue = "skipped (no Save button)";
+	} else {
+		if (!(await clickButton("Save"))) problems.push("could not click Save");
+		await sleep(2000);
+		await ev(() => {
+			SugarCube.State.variables.saveProbe = "changed";
+		});
+		info.afterSave = await openSaves();
+		if (!info.afterSave.load.some(Boolean)) problems.push("no enabled Load button after saving");
+		if (!(await clickButton("Load"))) problems.push("could not click Load");
+		await sleep(2500);
+		info.slotValue = await ev(() => SugarCube.State.variables.saveProbe);
+		if (info.slotValue !== "slot") problems.push("slot load did not restore state: " + info.slotValue);
+		await ev(() => SugarCube.Dialog && SugarCube.Dialog.isOpen && SugarCube.Dialog.isOpen() && SugarCube.Dialog.close());
+	}
 
 	/* Save to file -> change -> import */
 	await ev(async () => {
@@ -243,22 +269,29 @@ async function run(browser, mode) {
 	info.errorViews = await ev(() => Array.from(document.querySelectorAll(".error-view")).map(e => (e.textContent || "").slice(0, 200)));
 	if (info.errorViews.length) problems.push("error views: " + info.errorViews.join(" | "));
 	if (alerts.length) problems.push("alerts: " + alerts.map(a => a.slice(0, 200)).join(" | "));
-	if (pageErrors.length) problems.push("page errors: " + pageErrors.join(" | "));
+	/* IndexedDB is left alone (DoL-localStorage method), so a denied open() surfaces as an uncaught rejection from
+	   SugarCube's idb adapter; reported, not failed. Any other page error fails. */
+	info.idbDenialErrors = pageErrors.filter(m => /denied permission to access the database|indexeddb/i.test(m));
+	const otherErrors = pageErrors.filter(m => !info.idbDenialErrors.includes(m));
+	if (otherErrors.length) problems.push("page errors: " + otherErrors.join(" | "));
 	await page.close();
 	return { mode, ok: problems.length === 0, problems, notFound, info };
 }
 
-const browser = await puppeteer.launch({
-	executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome",
-	headless: "new",
-	args: ["--no-sandbox", "--disable-gpu", "--allow-file-access-from-files"],
-});
-const modes = modeArg === "all" ? ["normal", "strict", "idbonly", "quota"] : modeArg.split(",");
+const modes = modeArg === "all" ? ["normal", "strict", "noidb", "idbonly", "quota"] : modeArg.split(",");
 const results = [];
-try {
-	for (const m of modes) results.push(await run(browser, m));
-} finally {
-	await browser.close();
+/* a fresh browser (temporary profile) per mode, so IndexedDB saves from one mode cannot affect the next */
+for (const m of modes) {
+	const browser = await puppeteer.launch({
+		executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome",
+		headless: "new",
+		args: ["--no-sandbox", "--disable-gpu", "--allow-file-access-from-files"],
+	});
+	try {
+		results.push(await run(browser, m));
+	} finally {
+		await browser.close();
+	}
 }
 console.log(JSON.stringify(results, null, 2));
 if (!results.every(r => r.ok)) process.exit(1);

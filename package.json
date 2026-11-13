@@ -7,7 +7,8 @@
     "lint-staged": "lint-staged",
     "prepare": "husky install",
     "lint": "eslint --fix --ext .js,.jsx .",
-    "test": "playwright test"
+    "test": "npm run test:storage && playwright test",
+    "test:storage": "node --test tests/storage-fallback.test.mjs tests/save-fallback-ui.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

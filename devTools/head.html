@@ -1,146 +1,39 @@
 <script>
-/* Storage fallback: localStorage/sessionStorage/indexedDB may be missing or throw
-   (private windows, blocked storage). Keep an in-memory stub so boot cannot loop.
-   devTools/prepend-storage-fallback.py copies it to the top of <head> after each build:
-   this script must run before SugarCube libraries: SugarCube disables its IDB
-   adapter only when window.indexedDB == null, and otherwise calls indexedDB.open(). */
+/* Storage fallback for devices with no storage (localStorage/sessionStorage null or blocked).
+   Saves stay in memory only — use Export / Copy Text Area to keep them. */
 (function(){
   function makeStub(){
     var mem = {};
     return {
-      getItem: function(k){ k = String(k); return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
       setItem: function(k, v){ try { mem[String(k)] = String(v); } catch(e){} },
-      removeItem: function(k){ delete mem[String(k)]; },
+      removeItem: function(k){ delete mem[k]; },
       clear: function(){ mem = {}; },
       key: function(i){ return Object.keys(mem)[i] || null; },
       get length(){ return Object.keys(mem).length; }
     };
   }
-  var memLS = makeStub();
-  var memSS = makeStub();
-  function works(s){
+  function ensure(name){
+    var ok = false;
     try {
-      if (!s || typeof s.getItem !== "function" || typeof s.setItem !== "function") return false;
-      var t = "__dol_store_test__";
-      s.setItem(t, "1");
-      var ok = s.getItem(t) === "1";
-      s.removeItem(t);
-      return ok;
-    } catch (e) { return false; }
-  }
-  function defineOn(obj, name, stub){
-    try {
-      Object.defineProperty(obj, name, { value: stub, configurable: true, writable: true, enumerable: true });
-      return works(obj[name]);
-    } catch (e) { return false; }
-  }
-  function ensure(name, stub){
-    try { if (works(window[name])) return true; } catch (e) {}
-    try { delete window[name]; } catch (e) {}
-    if (defineOn(window, name, stub)) return true;
-    try {
-      if (typeof Window !== "undefined" && Window.prototype && defineOn(Window.prototype, name, stub)) return true;
-    } catch (e) {}
-    try { window[name] = stub; } catch (e) {}
-    try { return works(window[name]); } catch (e) { return false; }
-  }
-  var nativeLS = false;
-  var nativeSS = false;
-  try { nativeLS = works(window.localStorage); } catch (e) {}
-  try { nativeSS = works(window.sessionStorage); } catch (e) {}
-  ensure("localStorage", memLS);
-  ensure("sessionStorage", memSS);
-  try {
-    if (typeof Storage !== "undefined" && Storage.prototype) {
-      ["getItem","setItem","removeItem","clear","key"].forEach(function(method){
-        try {
-          var orig = Storage.prototype[method];
-          if (typeof orig !== "function") return;
-          Storage.prototype[method] = function(){
-            try { return orig.apply(this, arguments); }
-            catch (e) {
-              var stub = memLS;
-              try { if (this === window.sessionStorage) stub = memSS; } catch (e2) {}
-              return stub[method].apply(stub, arguments);
-            }
-          };
-        } catch (e) {}
-      });
-    }
-  } catch (e) {}
-  function disableIndexedDB(){
-    function setNull(obj){
-      try { delete obj.indexedDB; } catch (e) {}
-      try {
-        Object.defineProperty(obj, "indexedDB", { value: null, configurable: true, writable: true, enumerable: true });
-        return obj.indexedDB == null;
-      } catch (e) {
-        try { obj.indexedDB = null; return obj.indexedDB == null; } catch (e2) { return false; }
+      var s = window[name];
+      if (s && typeof s.getItem === "function") {
+        var t = "__dol_" + name + "_test";
+        s.setItem(t, "1");
+        s.removeItem(t);
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    if (!ok) {
+      var stub = makeStub();
+      try { Object.defineProperty(window, name, { value: stub, configurable: true, writable: true }); }
+      catch (e1) {
+        try { window[name] = stub; } catch (e2) {}
       }
     }
-    setNull(window);
-    try { if (typeof Window !== "undefined" && Window.prototype) setNull(Window.prototype); } catch (e) {}
   }
-  function idbUnusable(){
-    try {
-      if (window.indexedDB == null) return true;
-      if (typeof window.indexedDB.open !== "function") return true;
-    } catch (e) { return true; }
-    try { probeReq = window.indexedDB.open("__dol_idb_probe__"); }
-    catch (e) { return true; }
-    return false;
-  }
-  /* What the fallback did, for the saves menu and the late polyfill. "memoryOnly" means saves
-     vanish when the tab closes. indexedDB: "native" | "disabled" (nulled before SugarCube) |
-     "denied" (open() failed asynchronously after SugarCube had already chosen IndexedDB). */
-  /* head.html runs twice (prepended copy, then tweego's --head copy); keep the first, truthful report. */
-  var fallback = window.DoLStorageFallback || (window.DoLStorageFallback = {
-    localStorage: nativeLS ? "native" : "memory",
-    sessionStorage: nativeSS ? "native" : "memory",
-    indexedDB: "native",
-    memoryOnly: !nativeLS,
-    active: function(){ return this.memoryOnly || this.indexedDB !== "native"; },
-    /* SugarCube's idb keeps active=true when its open() is denied, which leaves the saves menu
-       empty. Switch it to the slot-save list (idb.active's setter is not persisted). */
-    applyToIdb: function(){
-      try { if (fallback.indexedDB === "denied" && typeof idb !== "undefined" && idb && idb.active) idb.active = false; } catch (e) {}
-    }
-  });
-  function markDenied(){
-    if (fallback.indexedDB === "native") fallback.indexedDB = "denied";
-    fallback.applyToIdb();
-  }
-  var probeReq = null;
-  if (!nativeLS || !nativeSS || idbUnusable()) {
-    disableIndexedDB();
-    if (fallback.indexedDB === "native") fallback.indexedDB = "disabled";
-  } else if (probeReq) {
-    try {
-      probeReq.onerror = function(ev){ try { if (ev && ev.preventDefault) ev.preventDefault(); } catch (e) {} markDenied(); };
-      probeReq.onsuccess = function(){
-        try { probeReq.result.close(); window.indexedDB.deleteDatabase("__dol_idb_probe__"); } catch (e) {}
-      };
-    } catch (e) { markDenied(); }
-  }
-  /* SugarCube's idb.init() rejection when IndexedDB is denied is not caught; keep it off the console. */
-  try {
-    window.addEventListener("unhandledrejection", function(ev){
-      var r = ev && ev.reason;
-      if (!r || typeof DOMException === "undefined" || !(r instanceof DOMException)) return;
-      if (!/^(UnknownError|InvalidStateError|SecurityError|NotAllowedError|NotFoundError)$/.test(r.name)) return;
-      if (fallback.indexedDB === "native" && !/database|indexeddb/i.test(String(r.message))) return;
-      markDenied();
-      try { ev.preventDefault(); } catch (e) {}
-    });
-  } catch (e) {}
-  try {
-    if (navigator.storage && typeof navigator.storage.persist === "function") {
-      var persistOrig = navigator.storage.persist.bind(navigator.storage);
-      navigator.storage.persist = function(){
-        try { return persistOrig(); } catch (e) { return Promise.resolve(false); }
-      };
-    }
-  } catch (e) {}
+  ensure("localStorage");
+  ensure("sessionStorage");
 })();
 </script>
 <link type="image/png" rel="icon" sizes="16x16" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAGJUExURUdwTM5+RYZPI4BVKoRNH4lQIwAAAHU7H6xoMo1SInlRG4ZMIYNGIa5oNJdaLKtnNK5qNo5VHMJ3QKdkMZ1cMJ5dLqBfLaJgMqRfMJhYKYdQKNGvo6FhM6tkNJRVJ4tGF8B4QZ1cLaliM5FUJ5ZWKPbXxuPBs5NWJ4xSJKhiNJlZKPrp39Krmb2qpKBdLdGom927oo9SI7qHZJpaKbiWiruhmYlRIpVbNtqHTP/u4rVpOqhiMr9xP61jM7FnN7hrO7ttPptbK89+RumaVteFSL90PadbHN2PSKVYHLN1S6ZgMuO7n+3j3P/s34NOI/3p3ZRXKadjNOCPUOOTUsh6Qs59QPCiWsh3O7ZmKrh1Oo9NGMJ2Qp9YJrhqOrBkLtvSz694UpBSIOCUU7CFaNikhKdoOq9ySfHby6OZlHR4f6FvRp9TFpVTIP7o15t7ZqmHbY2YqODEruXEr7K3wC5ejfrNsODi5s+omPTazSJSgb29whxOfvLTxfzk1b+Ma8PEyfPj2+Hm63iNotY+v8UAAAA4dFJOUwD8PQYhfQEEtkkJKhexXbrGEu+WdaXC/rPoRln8+HUL++r0vIX1kPSx4p7s9q7OOP6Y1P1r/av8OyD8ogAAAOZJREFUGBk1wIWWglAUBdCjggzqdHd3N/chpWKP6HR3d3d/ubhcbtjczuIiW4kXeVypQ8oJVFR6YHOXBeelPLPaBUB0SAtLy6FwMBLZaGsAULMYWlldM/374XVlq90Drj4eiJrb5zLbPdrUO1ohMtkfvUjdxGMnB6ra6YLIZO0y9f94fUene0oXIDJZ0xN/Hw9EZ4bWAvj6FZah57d3otvjZh+AEd3I0O+PRbQTqxMA9Kks/fJlvVpzidoq2Jy9k0b6+/N+7LCJL0cO5x2fmX2a4Ad4AQVT01dDw6MoEHoGk0TJ7kbYsoQUMAKQPM6bAAAAAElFTkSuQmCC" />

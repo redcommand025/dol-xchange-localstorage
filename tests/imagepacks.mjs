@@ -217,7 +217,12 @@ async function run(browser, mode) {
 
 	results.errorViews = await ev(() => Array.from(document.querySelectorAll(".error-view")).map(e => e.textContent.slice(0, 200)));
 	if (results.errorViews.length) problems.push("error views: " + results.errorViews.join(" | "));
-	if (pageErrors.length) problems.push("page errors: " + pageErrors.join(" | "));
+	/* storage follows the DoL-localStorage method, which leaves a denied IndexedDB alone: SugarCube's idb adapter
+	   then reports an uncaught "denied permission" rejection. Reported, not failed; any other page error fails. */
+	const idbDenialErrors = pageErrors.filter(m => /denied permission to access the database|indexeddb/i.test(m));
+	const otherPageErrors = pageErrors.filter(m => !idbDenialErrors.includes(m));
+	results.idbDenialErrors = idbDenialErrors.length;
+	if (otherPageErrors.length) problems.push("page errors: " + otherPageErrors.join(" | "));
 	const packBad = bad.filter(b => b.includes("/imagepacks/"));
 	if (packBad.length) problems.push("pack 404s: " + packBad.slice(0, 5).join(" | "));
 	await page.close();
